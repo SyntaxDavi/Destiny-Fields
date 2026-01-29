@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --wood-dark: #4d3533;
+  --wood-light: #8b5e34;
+  --paper: #fdf2d9;
+  --stardew-green: #7aac5d;
+  --stardew-yellow: #f4bc44;
+  --stardew-orange: #da6b27;
+  --background: #d4e09b;
+  /* Light grassy green */
+  --foreground: #4d3533;
+}
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --font-retro: 'Press Start 2P', system-ui;
+}
+
+body {
+  color: var(--foreground);
+  background-color: var(--background);
+  background-image: radial-gradient(var(--stardew-green) 1px, transparent 1px);
+  background-size: 20px 20px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+.pixel-panel {
+  background-color: var(--paper);
+  border: 4px solid var(--wood-dark);
+  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.1);
+  image-rendering: pixelated;
+}
+
+.pixel-button {
+  background-color: var(--stardew-yellow);
+  border: 4px solid var(--wood-dark);
+  box-shadow: 0 4px 0 #bc801c;
+  transition: all 0.1s;
+}
+
+.pixel-button:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #bc801c;
+}
+
+.retro-text {
+  letter-spacing: -0.05em;
+  font-weight: 800;
+  text-transform: uppercase;
+}
