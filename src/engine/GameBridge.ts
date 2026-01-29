@@ -1,9 +1,12 @@
+import { ChoiceOption, ChoiceContext, InputProvider } from "./core/InputProvider";
+import { CombatStatus } from "./core/EventBus";
+import { LogEntry } from "../components/combat/LogTypes";
 import { Character } from "./entities/Character";
 import { AdventureManager } from "./logic/AdventureManager";
-import { InputProvider } from "./core/InputProvider";
+import { SaveManager } from "./logic/SaveManager";
 
 interface ChoiceRequest {
-    resolve: (value: number) => void;
+    resolve: (value: string) => void;
     reject: (reason?: Error) => void;
     timeout?: NodeJS.Timeout;
 }
@@ -15,13 +18,17 @@ export class GameBridge implements InputProvider {
     public activeEnemy: Character | null = null;
     public adventure: AdventureManager | null = null;
 
+    public combatStatus: CombatStatus = 'IDLE';
+    public lastCombatResult: 'VICTORY' | 'DEFEAT' | 'FLED' | null = null;
+
     private pendingChoice: ChoiceRequest | null = null;
     private eventUnsubscribers: Array<() => void> = [];
 
     // UI Callbacks
-    public onChoiceRequest: ((title: string, options: string[]) => void) | null = null;
+    public onChoiceRequest: ((title: string, options: ChoiceOption[], context: ChoiceContext) => void) | null = null;
     public onConfirmationRequest: ((message: string) => void) | null = null;
-    public onLog: ((message: string) => void) | null = null;
+    public onLog: ((entry: LogEntry) => void) | null = null;
+    public onCombatStatusChange: ((status: CombatStatus) => void) | null = null;
 
     private constructor() { }
 
@@ -46,9 +53,10 @@ export class GameBridge implements InputProvider {
 
     async requestChoice(
         title: string,
-        options: string[],
+        options: ChoiceOption[],
+        context: ChoiceContext,
         timeoutMs?: number
-    ): Promise<number> {
+    ): Promise<string> {
         if (this.pendingChoice) {
             throw new Error("Another choice request is already pending");
         }
@@ -64,7 +72,7 @@ export class GameBridge implements InputProvider {
             }
 
             if (this.onChoiceRequest) {
-                this.onChoiceRequest(title, options);
+                this.onChoiceRequest(title, options, context);
             } else {
                 reject(new Error("No UI handler registered for choice requests"));
             }
@@ -73,9 +81,9 @@ export class GameBridge implements InputProvider {
 
     async requestConfirmation(message: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            // Store as a "choice" between Yes (0) and No (1)
+            // Store as a "choice" between Yes (TRUE) and No (FALSE)
             this.pendingChoice = {
-                resolve: (index: number) => resolve(index === 0),
+                resolve: (id: string) => resolve(id === 'YES'),
                 reject,
             };
 
@@ -83,33 +91,28 @@ export class GameBridge implements InputProvider {
                 this.onConfirmationRequest(message);
             } else if (this.onChoiceRequest) {
                 // Fallback to choice request if no specific confirmation handler
-                this.onChoiceRequest(message, ["Yes", "No"]);
+                this.onChoiceRequest(message, [{ id: 'YES', label: 'Sim' }, { id: 'NO', label: 'Não' }], {
+                    actorName: 'System',
+                    type: 'CAMP_ACTION'
+                });
             } else {
                 reject(new Error("No UI handler registered for confirmation"));
             }
         });
     }
 
-    // ─── Public API for UI Layer ───
-
     /**
-     * Resolve the current pending choice with a selection index
+     * Resolve the current pending choice with a selection ID
      */
-    public resolveChoice(index: number): void {
+    public resolveChoice(id: string): void {
         if (!this.pendingChoice) {
             console.warn("No pending choice to resolve");
             return;
         }
 
-        // Validate index bounds if options were provided (optional validation)
-        if (index < 0) {
-            console.warn("Invalid choice index:", index);
-            return;
-        }
-
-        const { resolve, timeout } = this.pendingChoice;
+        const { resolve } = this.pendingChoice;
         this.clearPendingChoice();
-        resolve(index);
+        resolve(id);
     }
 
     /**
@@ -148,6 +151,13 @@ export class GameBridge implements InputProvider {
     }
 
     /**
+     * Get the hero's inventory items
+     */
+    public getHeroInventory(): any[] {
+        return this.hero?.getInventoryItems() || [];
+    }
+
+    /**
      * Initialize a new hero and adventure
      */
     public initHero(name: string, className: 'Tanque' | 'Mago' | string): void {
@@ -164,47 +174,138 @@ export class GameBridge implements InputProvider {
         this.hero = new Character(baseStats);
         this.hero.inputProvider = this;
 
-        // Subscribe to domain events with cleanup tracking
-        const unsub = this.hero.events.subscribe('onDomainMessage', (data: { message: string }) => {
-            this.log(data.message);
+        // onDomainMessage is now deprecated for combat logs, but kept for generic system messages
+        const unsub = this.hero.events.subscribe('onDomainMessage', (data) => {
+            // For now, treat legacy string logs as 'info'
+            this.log({
+                id: data.id,
+                timestamp: Date.now(),
+                type: 'info',
+                message: data.message
+            });
         });
         this.eventUnsubscribers.push(unsub);
 
+        // Structured Combat Events
+        const unsubDamage = this.hero.events.subscribe('onDamage', (data) => {
+            this.log({
+                id: `dmg-${Date.now()}`,
+                timestamp: Date.now(),
+                type: 'damage',
+                source: 'Misterioso', // TODO: Add attacker to payload
+                target: this.hero!.name,
+                value: data.damage
+            });
+        });
+        this.eventUnsubscribers.push(unsubDamage);
+
+        const unsubHeal = this.hero.events.subscribe('onHeal', (data) => {
+            this.log({
+                id: `heal-${Date.now()}`,
+                timestamp: Date.now(),
+                type: 'heal',
+                source: 'Self',
+                target: this.hero!.name,
+                value: data.amount
+            });
+        });
+        this.eventUnsubscribers.push(unsubHeal);
+
+        const unsubStatus = this.hero.events.subscribe('onCombatStatusChange', (data) => {
+            this.combatStatus = data.status;
+            this.onCombatStatusChange?.(data.status);
+
+            // Log phase change
+            this.log({
+                id: `phase-${Date.now()}`,
+                timestamp: Date.now(),
+                type: 'phase',
+                phaseName: data.status
+            });
+        });
+        this.eventUnsubscribers.push(unsubStatus);
+
+        const unsubEnd = this.hero.events.subscribe('onCombatEnd', (data) => {
+            this.lastCombatResult = data.result;
+        });
+        this.eventUnsubscribers.push(unsubEnd);
+
         this.adventure = new AdventureManager(this.hero);
-        this.log(`Bem-vindo, ${name} o ${className}!`);
+
+        // Wire up Engine State Callbacks
+        this.adventure.onEncounterStart = (enemy) => {
+            this.activeEnemy = enemy;
+        };
+        this.adventure.onEncounterEnd = () => {
+            this.activeEnemy = null;
+        };
+
+        this.log({
+            id: `welcome-${Date.now()}`,
+            timestamp: Date.now(),
+            type: 'info',
+            message: `Bem-vindo, ${name} o ${className}!`
+        });
     }
 
     /**
      * Log a message through the UI callback
      */
-    public log(message: string): void {
-        // console.log(`[Game] ${message}`); 
-        this.onLog?.(message);
+    public log(entry: LogEntry): void {
+        this.onLog?.(entry);
     }
 
     public saveGame() {
-        const { SaveManager } = require('./logic/SaveManager');
         if (this.hero) {
             SaveManager.save(this.hero);
-            this.log("Jogo salvo com sucesso!");
+            this.log({
+                id: `save-${Date.now()}`,
+                timestamp: Date.now(),
+                type: 'info',
+                message: "Jogo salvo com sucesso!",
+                icon: '💾'
+            });
         }
     }
 
     public loadGame() {
-        const { SaveManager } = require('./logic/SaveManager');
         const loadedHero = SaveManager.load();
         if (loadedHero) {
             loadedHero.inputProvider = this;
             this.hero = loadedHero;
             this.adventure = new AdventureManager(loadedHero);
 
+            // Wire up Engine State Callbacks
+            this.adventure.onEncounterStart = (enemy) => {
+                this.activeEnemy = enemy;
+            };
+            this.adventure.onEncounterEnd = () => {
+                this.activeEnemy = null;
+            };
+
             // Re-subscribe
-            const unsub = loadedHero.events.subscribe('onDomainMessage', (data: { message: string }) => {
-                this.log(data.message);
+            const unsub = loadedHero.events.subscribe('onDomainMessage', (data) => {
+                this.log({
+                    id: data.id || `msg-${Date.now()}`,
+                    timestamp: Date.now(),
+                    type: 'info',
+                    message: data.message
+                });
             });
             this.eventUnsubscribers.push(unsub);
 
-            this.log(`Jogo carregado! Bem-vindo de volta, ${loadedHero.name}.`);
+            const unsubStatus = loadedHero.events.subscribe('onCombatStatusChange', (data) => {
+                this.combatStatus = data.status;
+                this.onCombatStatusChange?.(data.status);
+            });
+            this.eventUnsubscribers.push(unsubStatus);
+
+            this.log({
+                id: `load-${Date.now()}`,
+                timestamp: Date.now(),
+                type: 'info',
+                message: `Jogo carregado! Bem-vindo de volta, ${loadedHero.name}.`
+            });
             return loadedHero;
         }
         return null;

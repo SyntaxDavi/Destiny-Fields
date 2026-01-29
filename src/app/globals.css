@@ -1,52 +1,161 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --wood-dark: #4d3533;
-  --wood-light: #8b5e34;
-  --paper: #fdf2d9;
-  --stardew-green: #7aac5d;
-  --stardew-yellow: #f4bc44;
-  --stardew-orange: #da6b27;
-  --background: #d4e09b;
-  /* Light grassy green */
-  --foreground: #4d3533;
-}
+  /* Destiny Fields - Light Parade Palette */
+  --bg-primary: #fdf6e3;
+  /* Solarized Base3 - Creamy, warm background */
+  --bg-secondary: #eee8d5;
+  /* Solarized Base2 - Slightly darker for panels */
+  --bg-surface: #ffffff;
+  /* White - Clean surface */
 
-@theme {
-  --font-sans: 'Inter', sans-serif;
-  --font-retro: 'Press Start 2P', system-ui;
+  --text-primary: #433422;
+  /* Very dark warm brown - High contrast reading */
+  --text-secondary: #786c5e;
+  /* Muted brown - Secondary text */
+
+  --accent-gold: #d97706;
+  /* Amber 600 - Rich warm accent */
+  --accent-gold-dim: #92400e;
+  /* Amber 800 - Deep accent */
+
+  --danger: #dc2626;
+  /* Red 600 - Sharper red for light mode */
+  --success: #059669;
+  /* Emerald 600 - Sharper green for light mode */
 }
 
 body {
-  color: var(--foreground);
-  background-color: var(--background);
-  background-image: radial-gradient(var(--stardew-green) 1px, transparent 1px);
-  background-size: 20px 20px;
-  min-height: 100vh;
-  margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  /* Start with sans for UI */
+  overflow-x: hidden;
+}
+
+/* Custom Utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 6px -1px rgba(67, 52, 34, 0.05), 0 2px 4px -1px rgba(67, 52, 34, 0.03);
 }
 
 .pixel-panel {
-  background-color: var(--paper);
-  border: 4px solid var(--wood-dark);
-  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.1);
-  image-rendering: pixelated;
+  /* Kept for legacy compatibility but updated styling */
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-surface);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border-radius: 0.5rem;
+  /* Modern rounded corners */
 }
 
-.pixel-button {
-  background-color: var(--stardew-yellow);
-  border: 4px solid var(--wood-dark);
-  box-shadow: 0 4px 0 #bc801c;
-  transition: all 0.1s;
+/* Animations */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
 }
 
-.pixel-button:active {
-  transform: translateY(2px);
-  box-shadow: 0 2px 0 #bc801c;
+.animate-float {
+  animation: float 3s ease-in-out infinite;
 }
 
-.retro-text {
-  letter-spacing: -0.05em;
-  font-weight: 800;
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(217, 119, 6, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 15px rgba(217, 119, 6, 0.5);
+  }
+}
+
+.animate-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+/* --- Semantic UI Classes (Game Polish) --- */
+
+.texture-paper {
+  background-color: var(--bg-primary);
+  background-image:
+    radial-gradient(var(--bg-secondary) 1px, transparent 1px),
+    radial-gradient(var(--bg-secondary) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+}
+
+.panel-border {
+  border: 2px solid var(--text-primary);
+  border-radius: 4px;
+  /* Slight rounding for polish, but distinct */
+  box-shadow: 4px 4px 0px rgba(67, 52, 34, 0.1);
+}
+
+.action-button {
+  background: var(--bg-surface);
+  border: 2px solid var(--text-secondary);
+  color: var(--text-primary);
+  font-weight: 900;
   text-transform: uppercase;
+  padding: 0.75rem 1rem;
+  transition: all 0.1s;
+  box-shadow: 2px 2px 0px var(--text-secondary);
+}
+
+.action-button:hover:not(:disabled) {
+  border-color: var(--accent-gold);
+  color: var(--accent-gold-dim);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px var(--accent-gold);
+}
+
+.action-button:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px var(--accent-gold);
+}
+
+.action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(100%);
+  border-color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.action-button--primary {
+  background: var(--bg-secondary);
+  border-color: var(--accent-gold-dim);
+  color: var(--accent-gold-dim);
+}
+
+/* Scrollbar Polish */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }

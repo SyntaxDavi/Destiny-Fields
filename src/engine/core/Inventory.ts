@@ -58,8 +58,8 @@ export class Inventory {
     }
 
     public static fromSaveData(data: any[]): Inventory {
-        // Here we would rebuild the Item objects, potentially using the ItemFactory or a similar rehydration logic
-        // For simplicity in this demo, we'll assume the data is mostly matches.
-        return new Inventory(data as Item[]);
+        const { ItemFactory } = require('./ItemFactory');
+        const items = data.map(itemData => ItemFactory.rehydrate(itemData));
+        return new Inventory(items);
     }
 }

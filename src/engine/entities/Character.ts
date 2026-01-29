@@ -89,13 +89,19 @@ export class Character implements Combatant {
 
         // Web/Async UI Reaction
         if (this.inputProvider) {
-            const index = await this.inputProvider.requestChoice(
+            const id = await this.inputProvider.requestChoice(
                 `${this.name.toUpperCase()} está sendo atacado por ${attacker.name}!`,
-                ['Receber Golpe', 'Tentar Esquivar', 'Preparar Contra-ataque']
+                [
+                    { id: 'NONE', label: 'Receber Golpe' },
+                    { id: 'DODGE', label: 'Tentar Esquivar' },
+                    { id: 'COUNTER', label: 'Preparar Contra-ataque' }
+                ],
+                { actorName: this.name, type: 'COMBAT_REACTION', metadata: { attackerName: attacker.name } }
             );
-            switch (index) {
-                case 1: return ReactionType.DODGE;
-                case 2: return ReactionType.COUNTER;
+
+            switch (id) {
+                case 'DODGE': return ReactionType.DODGE;
+                case 'COUNTER': return ReactionType.COUNTER;
                 default: return ReactionType.NONE;
             }
         }
@@ -154,21 +160,19 @@ export class Character implements Combatant {
         if (this.currentLife <= 0) return;
 
         this.currentLife -= damage;
-        this.events.emit('onDomainMessage', { message: `💥 ${this.name} recebeu ${damage} de dano!` });
         this.events.emit('onDamage', { damage, currentLife: this.currentLife });
 
         if (this.currentLife <= 0) {
             this.currentLife = 0;
-            this.events.emit('onDomainMessage', { message: `💀 ${this.name} foi derrotado!` });
-            this.events.emit('onDeath', {});
+            this.events.emit('onDeath', { entityName: this.name });
         } else {
-            this.events.emit('onDomainMessage', { message: `❤️ ${this.name} está com ${this.currentLife} de vida!` });
+            // HP status logging moved to UI/Bridge
         }
     }
 
     public gainXp(amount: number): void {
         this.xp += amount;
-        this.events.emit('onDomainMessage', { message: `✨ ${this.name} ganhou ${amount} de XP!` });
+        this.events.emit('onDomainMessage', { id: `xp-${this.name}-${Date.now()}`, message: `✨ ${this.name} ganhou ${amount} de XP!` });
 
         while (this.xp >= this.xpToNextLevel) {
             this.levelUp();
@@ -187,14 +191,13 @@ export class Character implements Combatant {
         this.currentLife = this.maxLife;
         this.weaponDamage += damageBonus;
 
-        this.events.emit('onDomainMessage', { message: `\n🌟 LEVEL UP! ${this.name} atingiu o nível ${this.level}!` });
-        this.events.emit('onDomainMessage', { message: `   HP Máximo: ${this.maxLife} | Dano: ${this.weaponDamage}` });
+        this.events.emit('onDomainMessage', { id: `lvl-${this.name}-${Date.now()}`, message: `\n🌟 LEVEL UP! ${this.name} atingiu o nível ${this.level}!` });
+        this.events.emit('onDomainMessage', { id: `stats-${this.name}-${Date.now()}`, message: `   HP Máximo: ${this.maxLife} | Dano: ${this.weaponDamage}` });
     }
 
     public restoreFullLife(): void {
         this.currentLife = this.maxLife;
         this.events.emit('onHeal', { amount: this.maxLife });
-        this.events.emit('onDomainMessage', { message: `✨ ${this.name} recuperou toda a vida!` });
     }
 
     public addRewards(gold: number, xp: number): void {
@@ -204,5 +207,18 @@ export class Character implements Combatant {
 
     public addItem(item: Item): void {
         this.inventory.addItem(item);
+        this.events.emit('onInventoryChange', { inventory: this.inventory.getItems() });
+    }
+
+    public useItem(itemId: string): boolean {
+        const success = this.inventory.useItem(itemId, this);
+        if (success) {
+            this.events.emit('onInventoryChange', { inventory: this.inventory.getItems() });
+        }
+        return success;
+    }
+
+    public getInventoryItems(): Item[] {
+        return this.inventory.getItems();
     }
 }

@@ -42,19 +42,26 @@ export class TurnManager {
                 if (data.currentLife < c.maxLife * 0.25) {
                     const potion = c.inventory.getItems().find(i => i.type === ItemType.CONSUMABLE && i.name.includes('Poção'));
                     if (potion) {
-                        c.events.emit('onDomainMessage', { message: `⚡ REAÇÃO: ${c.name} está em perigo e usa uma poção automaticamente!` });
+                        c.events.emit('onDomainMessage', {
+                            id: `react-potion-${Date.now()}`,
+                            message: `⚡ REAÇÃO: ${c.name} está em perigo e usa uma poção automaticamente!`
+                        });
                         c.inventory.useItem(potion.id, c);
                     }
                 }
             });
 
             c.events.subscribe('onHeal', (data) => {
-                c.events.emit('onDomainMessage', { message: `❤️ ${c.name} foi curado!` });
+                c.events.emit('onDomainMessage', {
+                    id: `heal-msg-${Date.now()}`,
+                    message: `❤️ ${c.name} foi curado!`
+                });
             });
         });
     }
 
     public async startCombat(): Promise<CombatOutcome> {
+        this.emitStatus('STARTING');
         this.emitGlobal('🔥 O combate começou!');
         await wait(1000);
 
@@ -67,9 +74,14 @@ export class TurnManager {
                 if (!actor.isAlive()) continue;
 
                 if (actor.isPlayer) {
+                    this.emitStatus('PLAYER_TURN');
                     const choice = await this.getPlayerChoice(actor);
 
-                    if (choice === 'Fled') return { result: CombatResult.FLED };
+                    if (choice === 'Fled') {
+                        const outcome: CombatOutcome = { result: CombatResult.FLED };
+                        this.emitCombatEnd(outcome);
+                        return outcome;
+                    }
                     if (choice === 'Item') {
                         await this.handlePlayerItemUsage(actor as Character);
                     }
@@ -78,6 +90,7 @@ export class TurnManager {
                         if (target) await CombatSystem.resolveAttack(actor, target);
                     }
                 } else {
+                    this.emitStatus('ENEMY_TURN');
                     // Enemy turn AI
                     const target = this.combatants.find(c => c !== actor && c.isAlive());
                     if (target) {
@@ -91,21 +104,48 @@ export class TurnManager {
         }
 
         const winner = this.combatants.find(c => c.isAlive());
-        const playerWon = winner?.isPlayer || false;
+        const outcome: CombatOutcome = {
+            result: winner?.isPlayer ? CombatResult.VICTORY : CombatResult.DEFEAT,
+            winner: winner
+        };
 
         this.emitGlobal(`\n🏆 Vencedor: ${winner ? winner.name : "Ninguém (Empate)"}`);
         this.emitGlobal("-----------------------");
 
-        return {
-            result: playerWon ? CombatResult.VICTORY : CombatResult.DEFEAT,
-            winner: winner
-        };
+        this.emitCombatEnd(outcome);
+        return outcome;
+    }
+
+    private emitStatus(status: any) {
+        this.combatants.forEach(c => {
+            if (c instanceof Character) {
+                c.events.emit('onCombatStatusChange', { status });
+            }
+        });
+    }
+
+    private emitCombatEnd(outcome: CombatOutcome) {
+        let result: 'VICTORY' | 'DEFEAT' | 'FLED' = 'DEFEAT';
+        if (outcome.result === CombatResult.VICTORY) result = 'VICTORY';
+        if (outcome.result === CombatResult.FLED) result = 'FLED';
+
+        this.emitStatus('ENDED');
+        this.combatants.forEach(c => {
+            if (c instanceof Character) {
+                c.events.emit('onCombatEnd', {
+                    result,
+                    winner: outcome.winner?.name || null
+                });
+            }
+        });
     }
 
     private emitGlobal(message: string) {
         this.combatants.forEach(c => {
             if (c instanceof Character) {
-                c.events.emit('onDomainMessage', { message });
+                // Generate a unique ID for React stability
+                const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                c.events.emit('onDomainMessage', { id, message });
             }
         });
     }
@@ -113,28 +153,48 @@ export class TurnManager {
     private async handlePlayerItemUsage(actor: Character) {
         const items = actor.inventory.getItems();
         if (items.length === 0) {
-            actor.events.emit('onDomainMessage', { message: "\nInventário vazio!" });
+            actor.events.emit('onDomainMessage', {
+                id: `empty-inv-${Date.now()}`,
+                message: "\nInventário vazio!"
+            });
             return;
         }
 
         if (this.inputProvider) {
-            const itemOptions = items.map(i => `${i.name} (${i.description})`);
-            const index = await this.inputProvider.requestChoice('Qual item deseja usar?', itemOptions);
+            const itemOptions = items.map(i => ({
+                id: i.id,
+                label: `${i.name} (${i.description})`
+            }));
 
-            if (index !== -1) {
-                actor.inventory.useItem(items[index].id, actor);
+            const selectedId = await this.inputProvider.requestChoice(
+                'Qual item deseja usar?',
+                itemOptions,
+                { actorName: actor.name, type: 'ADVENTURE_DECISION', metadata: { subType: 'ITEM_USAGE' } }
+            );
+
+            if (selectedId) {
+                actor.inventory.useItem(selectedId, actor);
             }
         }
     }
 
     private async getPlayerChoice(actor: Combatant): Promise<'Attack' | 'Fled' | 'Item'> {
         if (this.inputProvider) {
-            const options = ['Atacar', 'Usar Item', 'Fugir'];
-            const index = await this.inputProvider.requestChoice(`Turno de ${actor.name}. O que deseja fazer?`, options);
+            const options = [
+                { id: 'ATTACK', label: 'Atacar' },
+                { id: 'ITEM', label: 'Usar Item' },
+                { id: 'FLEE', label: 'Fugir' }
+            ];
 
-            if (index === 0) return 'Attack';
-            if (index === 1) return 'Item';
-            if (index === 2) return 'Fled';
+            const id = await this.inputProvider.requestChoice(
+                `Turno de ${actor.name}. O que deseja fazer?`,
+                options,
+                { actorName: actor.name, type: 'COMBAT_REACTION' }
+            );
+
+            if (id === 'ATTACK') return 'Attack';
+            if (id === 'ITEM') return 'Item';
+            if (id === 'FLEE') return 'Fled';
         }
 
         return 'Attack';

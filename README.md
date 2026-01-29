@@ -1,13 +1,18 @@
-# RPG JOURNEY ⚔️🌿
+# DESTINY FIELDS ⚔️🌿 (In Progress)
 
-Um RPG de aventura clássico construído com **React**, **Next.js** e **TypeScript**.
+> **Status:** 🚧 Em Desenvolvimento (Alpha 0.2.0)
+
+Um RPG de aventura clássico com foco em narrativa e estética, construído com **React**, **Next.js** e **TypeScript**.
 
 ## 🌟 Funcionalidades
 - **Criação de Personagem**: Escolha entre classes como Guerreiro, Mago, Ladino e Tanque.
 - **Exploração Dinâmica**: Explore biomas e investigue arredores com encontros aleatórios.
-- **Combate por Turnos**: Enfrente inimigos variados (Slimes, Goblins, Ogros) com um sistema de reações (Esquiva, Contra-ataque).
+- **Combate por Turnos (Refatorado)**:
+    - Sistema robusto de Fases (Menu -> Combate -> Resultado).
+    - UI "Diegética" com texturas de papel e painéis de vidro.
+    - Logs de batalha cronológicos e detalhados.
 - **Sistema de Progressão**: Ganhe XP, suba de nível e colete itens saqueados.
-- **Save/Load System**: Salve seu progresso no Navegador (LocalStorage) e continue de onde parou.
+- **Save/Load System**: Salve seu progresso no Navegador (LocalStorage).
 
 ## 🚀 Como Executar
 

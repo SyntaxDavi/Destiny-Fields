@@ -13,8 +13,16 @@ export class AdventureManager {
     private hero: Character;
     private runContext: RunContext = new RunContext();
 
+    // Callbacks for Engine State (Injected by GameBridge)
+    public onEncounterStart?: (enemy: Character) => void;
+    public onEncounterEnd?: () => void;
+
     constructor(hero: Character) {
         this.hero = hero;
+    }
+
+    public async startCombat(): Promise<void> {
+        await this.handleEncounter();
     }
 
     public async handleEncounter(enemyData?: any): Promise<any> {
@@ -32,8 +40,8 @@ export class AdventureManager {
             isPlayer: false
         });
 
-        const bridge = (global as any).GameBridge || (require('../GameBridge').GameBridge).getInstance();
-        bridge.activeEnemy = enemy;
+        // Notify Engine (GameBridge) about the active enemy
+        this.onEncounterStart?.(enemy);
 
         const combat = new TurnManager([this.hero, enemy], this.hero.inputProvider);
         const outcome = await combat.startCombat();
@@ -49,12 +57,16 @@ export class AdventureManager {
             // Item drop logic scaled by level
             if (Math.random() > 0.4) {
                 const item = ItemFactory.createRandomItem(this.hero.level);
-                this.hero.events.emit('onDomainMessage', { message: `💎 Saque encontrado: ${item.name}!` });
+                this.hero.events.emit('onDomainMessage', {
+                    id: `loot-${Date.now()}`,
+                    message: `💎 Saque encontrado: ${item.name}!`
+                });
                 this.hero.addItem(item);
             }
         }
 
-        bridge.activeEnemy = null;
+        // Notify Engine to clear enemy
+        this.onEncounterEnd?.();
         return outcome;
     }
 

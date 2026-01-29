@@ -84,4 +84,17 @@ export class ItemFactory {
             uses: 1
         } as Consumable;
     }
+
+    public static rehydrate(data: any): Item {
+        const effects = (data.effects || []).map((e: any) => {
+            if (e.type === 'HEAL') return new HealEffect(e.value, e.description);
+            if (e.type === 'DAMAGE') return new DamageEffect(e.value, e.description);
+            return e;
+        });
+
+        return {
+            ...data,
+            effects
+        };
+    }
 }
